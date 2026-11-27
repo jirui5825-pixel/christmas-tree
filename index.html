@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#03060d">
-<title>Merry Christmas · 圣诞树</title>
-<meta name="description" content="一棵会呼吸的 3D 粒子圣诞树：拖动旋转、点击撒星火、可以挂上自己的照片。">
+<title>Merry Christmas · 手势圣诞树</title>
+<meta name="description" content="一棵会呼吸的 3D 粒子圣诞树：挥手转树、捏合缩放、握拳炸成星云。Three.js + MediaPipe。">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
 <style>
   :root{
@@ -23,27 +23,26 @@
     font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
     -webkit-tap-highlight-color:transparent;
   }
-  /* 夜空底色（canvas 是透明的，这里负责氛围） */
   body::before{
     content:""; position:fixed; inset:0; z-index:0;
     background:
-      radial-gradient(120% 90% at 50% 108%, rgba(38,86,130,.55) 0%, rgba(14,32,56,.35) 38%, rgba(0,0,0,0) 68%),
-      radial-gradient(70% 55% at 50% 16%, rgba(30,52,96,.42) 0%, rgba(0,0,0,0) 70%),
+      radial-gradient(120% 90% at 50% 108%, rgba(38,86,130,.52) 0%, rgba(14,32,56,.32) 38%, rgba(0,0,0,0) 68%),
+      radial-gradient(70% 55% at 50% 16%, rgba(30,52,96,.40) 0%, rgba(0,0,0,0) 70%),
       linear-gradient(180deg,#04070f 0%, #050b16 42%, #02040a 100%);
   }
   body::after{
-    content:""; position:fixed; inset:0; z-index:1; pointer-events:none;
-    background:radial-gradient(58% 52% at 50% 52%, rgba(0,0,0,0) 40%, rgba(0,0,0,.55) 100%);
+    content:""; position:fixed; inset:0; z-index:3; pointer-events:none;
+    background:radial-gradient(58% 52% at 50% 52%, rgba(0,0,0,0) 42%, rgba(0,0,0,.5) 100%);
   }
   #stage{position:fixed; inset:0; z-index:2}
   #stage canvas{display:block; width:100%; height:100%; opacity:0; transition:opacity 1.1s ease .15s}
+  #fx{position:fixed; inset:0; z-index:2; pointer-events:none}
   body.ready #stage canvas{opacity:1}
 
-  /* ---------- 文案 ---------- */
   .hud{position:fixed; z-index:5; pointer-events:none; opacity:0; transform:translateY(10px);
        transition:opacity .9s ease, transform .9s ease}
   body.ready .hud{opacity:1; transform:none}
-  .top{left:0; right:0; top:clamp(20px,5vh,56px); text-align:center; padding:0 20px}
+  .top{left:0; right:0; top:clamp(18px,4.6vh,52px); text-align:center; padding:0 20px}
   .title{
     margin:0; font-family:var(--serif); font-weight:500;
     font-size:clamp(21px,6vw,54px); letter-spacing:.1em; text-transform:uppercase;
@@ -64,7 +63,7 @@
   .corner.bl{left:18px; bottom:14px}
   .corner.br{right:18px; bottom:14px}
 
-  /* ---------- 按钮 ---------- */
+  /* 按钮 */
   .dock{
     position:fixed; z-index:6; left:0; right:0; bottom:calc(max(26px,env(safe-area-inset-bottom)) + 34px);
     transform:translateY(14px); display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
@@ -82,16 +81,34 @@
   .btn:hover{background:rgba(255,255,255,.14); border-color:rgba(255,214,158,.45); color:#fff}
   .btn:active{transform:scale(.96)}
   .btn.on{border-color:rgba(255,206,140,.7); color:#ffdfb0; background:rgba(255,190,110,.14)}
+  .btn[disabled]{opacity:.55; cursor:default}
   .btn svg{width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.6;
            stroke-linecap:round; stroke-linejoin:round; opacity:.9}
 
-  /* ---------- 提示 / 报错 ---------- */
+  /* 摄像头预览 */
+  .hand{
+    position:fixed; z-index:6; left:16px; bottom:calc(max(26px,env(safe-area-inset-bottom)) + 34px);
+    width:176px; padding:8px 8px 6px; border-radius:16px;
+    background:rgba(10,16,26,.55); border:1px solid var(--glass-brd);
+    backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    display:none; box-shadow:0 10px 30px rgba(0,0,0,.45);
+  }
+  .hand.show{display:block; animation:pop .5s ease both}
+  @keyframes pop{from{opacity:0; transform:translateY(10px) scale(.96)} to{opacity:1; transform:none}}
+  .hand canvas{width:100%; height:auto; display:block; border-radius:10px; background:#05080f}
+  .hand .row{display:flex; align-items:center; justify-content:space-between; padding-top:6px;
+             font-size:11px; letter-spacing:.08em; color:rgba(214,230,250,.6)}
+  .hand .g{color:var(--gold); font-weight:500}
+  .hand .dot{width:6px; height:6px; border-radius:50%; background:#54e08a; box-shadow:0 0 8px #54e08a}
+  .hand .dot.wait{background:#f2b34b; box-shadow:0 0 8px #f2b34b}
+
   .toast{
     position:fixed; z-index:9; left:50%; bottom:calc(max(26px,env(safe-area-inset-bottom)) + 92px);
     transform:translate(-50%,8px); padding:10px 18px; border-radius:999px;
     background:rgba(8,14,24,.82); border:1px solid var(--glass-brd); color:var(--gold-2);
     font-size:13px; letter-spacing:.08em; opacity:0; pointer-events:none;
     transition:opacity .3s, transform .3s; backdrop-filter:blur(10px);
+    max-width:min(86vw,520px); text-align:center; line-height:1.6;
   }
   .toast.show{opacity:1; transform:translate(-50%,0)}
   #fatal{
@@ -108,6 +125,7 @@
     .bottom{bottom:calc(max(14px,env(safe-area-inset-bottom)) + 30px)}
     .hint{font-size:11px; letter-spacing:.1em}
     .corner{display:none}
+    .hand{width:124px; left:10px; bottom:calc(max(14px,env(safe-area-inset-bottom)) + 124px)}
   }
   @media (prefers-reduced-motion:reduce){
     #stage canvas{transition:none}
@@ -117,13 +135,26 @@
 <body>
 
 <div id="stage" aria-hidden="true"></div>
+<canvas id="fx"></canvas>
 
 <div class="hud top">
   <h1 class="title" id="title">Merry Christmas</h1>
   <p class="sub" id="sub">愿这棵树替我陪你过冬</p>
 </div>
 
+<div class="hand" id="handPanel">
+  <canvas id="handCanvas" width="336" height="252"></canvas>
+  <div class="row">
+    <span><span class="dot" id="handDot"></span> <span id="handState">初始化…</span></span>
+    <span class="g" id="handGesture">—</span>
+  </div>
+</div>
+
 <div class="dock">
+  <button class="btn" id="btnHand" type="button" title="开启摄像头，用手控制这棵树">
+    <svg viewBox="0 0 24 24"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12"/><path d="M11 11.5V4.8a1.5 1.5 0 0 1 3 0V12"/><path d="M14 11.8V6.5a1.5 1.5 0 0 1 3 0V14"/><path d="M17 12.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.6a6 6 0 0 1-4.6-2.2L5 15.2a1.6 1.6 0 0 1 2.4-2.1L9 15"/></svg>
+    <span class="lbl">手势</span>
+  </button>
   <button class="btn" id="btnMusic" type="button" title="播放 / 暂停铃儿响叮当">
     <svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.6"/><circle cx="16.5" cy="16" r="2.6"/></svg>
     <span class="lbl">音乐</span>
@@ -132,7 +163,7 @@
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="M4 17l4.5-4.2L13 17l3-2.6 4 3.6"/></svg>
     <span class="lbl">挂照片</span>
   </button>
-  <button class="btn" id="btnName" type="button" title="写上你想对 TA 说的话里的名字">
+  <button class="btn" id="btnName" type="button" title="把名字写进副标题">
     <svg viewBox="0 0 24 24"><path d="M4 20h4l10-10a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5 4 20z"/></svg>
     <span class="lbl">名字</span>
   </button>
@@ -140,21 +171,22 @@
     <svg viewBox="0 0 24 24"><path d="M10 13a4.5 4.5 0 0 0 6.4 0l2.6-2.6a4.5 4.5 0 0 0-6.4-6.4L11 5.6"/><path d="M14 11a4.5 4.5 0 0 0-6.4 0L5 13.6a4.5 4.5 0 0 0 6.4 6.4l1.6-1.6"/></svg>
     <span class="lbl">复制链接</span>
   </button>
-  <button class="btn wide" id="btnFull" type="button" title="全屏">
+  <button class="btn" id="btnFull" type="button" title="全屏">
     <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
     <span class="lbl">全屏</span>
   </button>
 </div>
 
 <div class="hud bottom">
-  <p class="hint" id="hint">拖动旋转 · 滚轮缩放 · 点击撒一把星火</p>
+  <p class="hint" id="hint">拖动旋转 · 滚轮缩放 · 点击撒星火</p>
 </div>
 
-<div class="corner bl">christmas-tree · v7.6</div>
-<div class="corner br" id="credit">three.js · webgl</div>
+<div class="corner bl">christmas-tree · v7.6 gesture</div>
+<div class="corner br">three.js · mediapipe · webgl</div>
 
 <div class="toast" id="toast"></div>
 <input type="file" id="filePicker" accept="image/*" multiple hidden>
+<video id="cam" playsinline muted style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px"></video>
 
 <div id="fatal">
   <div>
@@ -175,32 +207,27 @@
   var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
                  (navigator.maxTouchPoints > 1 && window.innerWidth < 820);
 
-  function fail(msg) {
-    $('fatalMsg').innerHTML = msg;
-    $('fatal').classList.add('show');
-  }
+  function fail(msg) { $('fatalMsg').innerHTML = msg; $('fatal').classList.add('show'); }
   if (typeof THREE === 'undefined') {
     fail('没有找到 <code>vendor/three.min.js</code>。<br>请把整个文件夹一起上传，不要只传 index.html。');
     return;
   }
 
   var toastTimer = null;
-  function toast(text) {
+  function toast(text, ms) {
     var el = $('toast');
-    el.textContent = text;
+    el.innerHTML = text;
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, ms || 2400);
   }
 
-  /* =======================================================================
+  /* =====================================================================
      参数
-     ======================================================================= */
-  var H = 15;                       // 树高
-  var R = 6.2;                      // 底部半径
-  var TURNS = 9;                    // 螺旋圈数
+     ===================================================================== */
+  var H = 15, R = 6.2, TURNS = 9;
   var TARGET_Y = H * 0.57;
-  var fit = { fov: 45, dist: 33, ty: H * 0.57 };
+  var fit = { fov: 45, dist: 39, ty: H * 0.48 };
 
   var N_SHELL   = isMobile ? 10000 : 20000;
   var N_GARLAND = isMobile ? 2600  : 5200;
@@ -212,19 +239,20 @@
     var t = Math.min(Math.max(y / H, 0), 1);
     return R * Math.pow(1 - t, 0.86);
   }
+  function rand(a, b) { return a + Math.random() * (b - a); }
 
-  /* =======================================================================
-     渲染器 / 场景
-     ======================================================================= */
+  /* =====================================================================
+     渲染器 / 场景 / 后期
+     ===================================================================== */
   var stage = $('stage');
   var renderer;
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: !isMobile, alpha: true, powerPreference: 'high-performance' });
+    renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' });
   } catch (e) {
     fail('这个浏览器没能创建 WebGL 上下文。<br>请用较新的 Chrome / Edge / Safari 打开。');
     return;
   }
-  var DPR = Math.min(window.devicePixelRatio || 1, isMobile ? 2 : 2);
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
   renderer.setPixelRatio(DPR);
   renderer.setSize(window.innerWidth, window.innerHeight);
   if ('outputEncoding' in renderer) renderer.outputEncoding = THREE.sRGBEncoding;
@@ -234,42 +262,118 @@
   var scene = new THREE.Scene();
   var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
 
-  /* =======================================================================
-     材质工厂：一枚会呼吸的圆形粒子
-     ======================================================================= */
+  // ---- 全屏四边形（后期用）----
+  var fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  var fsScene = new THREE.Scene();
+  var fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), null);
+  fsQuad.frustumCulled = false;
+  fsScene.add(fsQuad);
+
+  var rtOpts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat };
+  var rtScene = new THREE.WebGLRenderTarget(2, 2, rtOpts);
+  rtScene.texture.encoding = THREE.sRGBEncoding;
+  var rtBright = new THREE.WebGLRenderTarget(2, 2, rtOpts);
+  var rtBlurA = new THREE.WebGLRenderTarget(2, 2, rtOpts);
+  var rtBlurB = new THREE.WebGLRenderTarget(2, 2, rtOpts);
+
+  var VS_QUAD = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+
+  var matBright = new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null }, uThreshold: { value: 0.56 }, uKnee: { value: 0.28 } },
+    vertexShader: VS_QUAD,
+    fragmentShader: [
+      'uniform sampler2D tDiffuse; uniform float uThreshold; uniform float uKnee;',
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vec3 c = texture2D(tDiffuse, vUv).rgb;',
+      '  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));',
+      '  float w = smoothstep(uThreshold, uThreshold + uKnee, l);',
+      '  gl_FragColor = vec4(c * w, 1.0);',
+      '}'
+    ].join('\n'),
+    depthTest: false, depthWrite: false
+  });
+
+  var matBlur = new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null }, uDir: { value: new THREE.Vector2(1, 0) } },
+    vertexShader: VS_QUAD,
+    fragmentShader: [
+      'uniform sampler2D tDiffuse; uniform vec2 uDir;',
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vec3 s = texture2D(tDiffuse, vUv).rgb * 0.227027;',
+      '  s += (texture2D(tDiffuse, vUv + uDir * 1.3846).rgb + texture2D(tDiffuse, vUv - uDir * 1.3846).rgb) * 0.316216;',
+      '  s += (texture2D(tDiffuse, vUv + uDir * 3.2308).rgb + texture2D(tDiffuse, vUv - uDir * 3.2308).rgb) * 0.070270;',
+      '  gl_FragColor = vec4(s, 1.0);',
+      '}'
+    ].join('\n'),
+    depthTest: false, depthWrite: false
+  });
+
+  var matComp = new THREE.ShaderMaterial({
+    uniforms: {
+      tScene: { value: null }, tBloom: { value: null },
+      uStrength: { value: 0.62 }, uVignette: { value: 0.30 }
+    },
+    vertexShader: VS_QUAD,
+    fragmentShader: [
+      'uniform sampler2D tScene; uniform sampler2D tBloom;',
+      'uniform float uStrength; uniform float uVignette;',
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vec3 base = texture2D(tScene, vUv).rgb;',
+      '  vec3 bloom = texture2D(tBloom, vUv).rgb;',
+      '  vec3 col = base + bloom * uStrength;',
+      '  float l = dot(col, vec3(0.299, 0.587, 0.114));',
+      '  col = mix(vec3(l), col, 1.16);',
+      '  col = pow(max(col, 0.0), vec3(0.96));',
+      '  float d = distance(vUv, vec2(0.5));',
+      '  col *= 1.0 - smoothstep(0.42, 0.98, d) * uVignette * 0.35;',
+      '  gl_FragColor = vec4(col, 1.0);',
+      '}'
+    ].join('\n'),
+    depthTest: false, depthWrite: false
+  });
+
+  var BLOOM_SCALE = 0.5;
+  function resizeTargets(w, h) {
+    rtScene.setSize(w, h);
+    var bw = Math.max(2, Math.floor(w * BLOOM_SCALE)), bh = Math.max(2, Math.floor(h * BLOOM_SCALE));
+    rtBright.setSize(bw, bh); rtBlurA.setSize(bw, bh); rtBlurB.setSize(bw, bh);
+    matBlur.uniforms.uDir.value.set(1 / bw, 0);
+  }
+
+  /* =====================================================================
+     点材质
+     ===================================================================== */
   var POINT_VERT = [
-    'uniform float uTime;',
-    'uniform float uPR;',
-    'uniform float uScale;',
-    'uniform float uSway;',
-    'uniform float uTwinkle;',
-    'uniform float uAlpha;',
-    'attribute float aSize;',
-    'attribute float aPhase;',
-    'attribute float aAlpha;',
-    'attribute vec3 aColor;',
-    'varying vec3 vColor;',
-    'varying float vA;',
+    'uniform float uTime; uniform float uPR; uniform float uScale; uniform float uSway;',
+    'uniform float uTwinkle; uniform float uAlpha; uniform float uExplode;',
+    'attribute float aSize; attribute float aPhase; attribute float aAlpha;',
+    'attribute vec3 aColor; attribute vec3 aDir;',
+    'varying vec3 vColor; varying float vA;',
     'void main() {',
     '  vec3 p = position;',
     '  float h = max(p.y, 0.0) / ' + H.toFixed(1) + ';',
     '  float s = sin(uTime * 0.75 + h * 3.0 + aPhase * 6.2831);',
     '  p.x += s * uSway * (0.25 + h * 1.1);',
     '  p.z += cos(uTime * 0.62 + h * 2.4 + aPhase * 6.2831) * uSway * (0.25 + h * 1.1);',
+    '  // 握拳炸开：沿随机方向推出去，并带一点上浮',
+    '  float ex = uExplode * uExplode;',
+    '  p += aDir * (ex * (5.0 + 7.0 * aPhase));',
+    '  p.y += ex * (aPhase - 0.35) * 3.4;',
     '  vec4 mv = modelViewMatrix * vec4(p, 1.0);',
     '  gl_Position = projectionMatrix * mv;',
     '  float tw = mix(1.0, 0.5 + 0.5 * sin(uTime * 2.6 + aPhase * 21.0), uTwinkle);',
     '  float ps = aSize * uScale * uPR * (66.0 / max(-mv.z, 0.001)) * (0.8 + 0.4 * tw);',
     '  gl_PointSize = clamp(ps, 1.0, 26.0);',
     '  vColor = aColor;',
-    '  vA = uAlpha * (0.40 + 0.32 * tw) * aAlpha;',
+    '  vA = uAlpha * (0.40 + 0.32 * tw) * aAlpha * (1.0 - ex * 0.25);',
     '}'
   ].join('\n');
 
   var POINT_FRAG = [
-    'varying vec3 vColor;',
-    'varying float vA;',
-    'uniform float uSoft;',
+    'varying vec3 vColor; varying float vA; uniform float uSoft;',
     'void main() {',
     '  vec2 uv = gl_PointCoord - 0.5;',
     '  float d = length(uv) * 2.0;',
@@ -289,33 +393,40 @@
         uSway:    { value: opts.sway || 0 },
         uTwinkle: { value: opts.twinkle != null ? opts.twinkle : 0.6 },
         uAlpha:   { value: opts.alpha != null ? opts.alpha : 1 },
-        uSoft:    { value: opts.soft != null ? opts.soft : 2.2 }
+        uSoft:    { value: opts.soft != null ? opts.soft : 2.2 },
+        uExplode: { value: 0 }
       },
       vertexShader: POINT_VERT,
       fragmentShader: POINT_FRAG,
-      transparent: true,
-      depthWrite: false,
-      depthTest: true,
+      transparent: true, depthWrite: false, depthTest: true,
       blending: THREE.AdditiveBlending
     });
   }
 
+  var explodeMats = [];
   function buildPoints(count, fill, material) {
     var pos = new Float32Array(count * 3);
     var col = new Float32Array(count * 3);
+    var dir = new Float32Array(count * 3);
     var size = new Float32Array(count);
     var phase = new Float32Array(count);
     var alpha = new Float32Array(count);
     var c = new THREE.Color();
-    var i, o;
-    for (i = 0; i < count; i++) {
-      o = i * 3;
+    for (var i = 0; i < count; i++) {
+      var o = i * 3;
       fill(i, pos, o, c, size, i, phase, alpha);
       col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b;
+      // 炸开方向：以原点为心的球面 + 一点随机
+      var dx = pos[o], dy = pos[o + 1] - H * 0.35, dz = pos[o + 2];
+      var len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+      dir[o]     = dx / len + rand(-0.25, 0.25);
+      dir[o + 1] = dy / len * 0.7 + rand(-0.2, 0.35);
+      dir[o + 2] = dz / len + rand(-0.25, 0.25);
     }
     var g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aDir', new THREE.BufferAttribute(dir, 3));
     g.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
     g.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
     g.setAttribute('aAlpha', new THREE.BufferAttribute(alpha, 1));
@@ -324,81 +435,58 @@
     return p;
   }
 
-  /* =======================================================================
-     树：外壳 + 螺旋彩带 + 挂饰
-     ======================================================================= */
+  /* =====================================================================
+     树 / 雪 / 地面
+     ===================================================================== */
   var matTree = makeMaterial({ scale: 1.0, sway: 0.22, twinkle: 0.55, soft: 2.0, alpha: 0.95 });
   var matGarland = makeMaterial({ scale: 1.25, sway: 0.26, twinkle: 0.8, soft: 1.7, alpha: 1.0 });
   var matOrn = makeMaterial({ scale: 0.95, sway: 0.2, twinkle: 0.35, soft: 1.5, alpha: 1.0 });
+  explodeMats.push(matTree, matGarland, matOrn);
 
   var treeGroup = new THREE.Group();
   scene.add(treeGroup);
 
-  function rand(a, b) { return a + Math.random() * (b - a); }
-
-  // 1) 外壳：锥面上的绿色粒子
   treeGroup.add(buildPoints(N_SHELL, function (i, pos, o, c, size, idx, phase, alpha) {
     var y = H * Math.pow(Math.random(), 1.16);
     var r = coneRadius(y) * rand(0.80, 1.0);
     var a = Math.random() * TAU;
-    pos[o] = Math.cos(a) * r;
-    pos[o + 1] = y + rand(-0.12, 0.12);
-    pos[o + 2] = Math.sin(a) * r;
+    pos[o] = Math.cos(a) * r; pos[o + 1] = y + rand(-0.12, 0.12); pos[o + 2] = Math.sin(a) * r;
     var t = y / H;
     c.setHSL(rand(0.30, 0.38) - t * 0.05, rand(0.55, 0.95), rand(0.12, 0.30) + t * 0.13);
-    size[idx] = rand(0.7, 1.7);
-    phase[idx] = Math.random();
-    alpha[idx] = 1;
+    size[idx] = rand(0.7, 1.7); phase[idx] = Math.random(); alpha[idx] = 1;
   }, matTree));
 
-  // 2) 螺旋彩带：一圈圈盘上去的亮点，让树有结构
   (function garland() {
-    var strands = 6;
-    var per = Math.floor(N_GARLAND / strands);
-    var idx = 0;
+    var strands = 6, per = Math.floor(N_GARLAND / strands);
     treeGroup.add(buildPoints(per * strands, function (i, pos, o, c, size, k, phase, alpha) {
-      var s = Math.floor(i / per);
-      var t = (i % per) / per;
+      var s = Math.floor(i / per), t = (i % per) / per;
       var y = t * H * 0.985;
       var a = (t * TURNS + s / strands) * TAU;
       var r = coneRadius(y) * 1.015;
-      pos[o] = Math.cos(a) * r;
-      pos[o + 1] = y;
-      pos[o + 2] = Math.sin(a) * r;
+      pos[o] = Math.cos(a) * r; pos[o + 1] = y; pos[o + 2] = Math.sin(a) * r;
       var warm = Math.pow(t, 3);
       c.setHSL(0.12 - warm * 0.01, 0.92, 0.50 + warm * 0.16);
-      size[k] = rand(1.3, 2.5);
-      phase[k] = Math.random();
-      alpha[k] = 1;
-      idx++;
+      size[k] = rand(1.3, 2.5); phase[k] = Math.random(); alpha[k] = 1;
     }, matGarland));
   })();
 
-  // 3) 挂饰：金、红、冰蓝的球
   treeGroup.add(buildPoints(N_ORN, function (i, pos, o, c, size, k, phase, alpha) {
     var y = rand(0.2, H * 0.96);
     var a = Math.random() * TAU;
     var r = coneRadius(y) * 1.035;
-    pos[o] = Math.cos(a) * r;
-    pos[o + 1] = y;
-    pos[o + 2] = Math.sin(a) * r;
+    pos[o] = Math.cos(a) * r; pos[o + 1] = y; pos[o + 2] = Math.sin(a) * r;
     var pick = Math.random();
-    if (pick < 0.5)      c.setHSL(0.105, 0.92, 0.62);        // 金
-    else if (pick < 0.78) c.setHSL(0.995, 0.88, 0.55);       // 红
-    else                  c.setHSL(0.55, 0.42, 0.86);        // 冰
-    size[k] = rand(2.2, 4.0);
-    phase[k] = Math.random();
-    alpha[k] = 1;
+    if (pick < 0.5)       c.setHSL(0.105, 0.92, 0.62);
+    else if (pick < 0.78) c.setHSL(0.995, 0.88, 0.55);
+    else                  c.setHSL(0.55, 0.42, 0.86);
+    size[k] = rand(2.2, 4.0); phase[k] = Math.random(); alpha[k] = 1;
   }, matOrn));
 
-  // 4) 地面：落在雪地上的碎灯
   var matFloor = makeMaterial({ scale: 0.8, sway: 0, twinkle: 0.9, soft: 2.4, alpha: 0.9 });
   scene.add(buildPoints(N_FLOOR, function (i, pos, o, c, size, k, phase, alpha) {
     var a = Math.random() * TAU;
     var r = rand(2.0, 12.5);
-    pos[o] = Math.cos(a) * r;
-    pos[o + 1] = -0.15 + rand(-0.05, 0.05);
-    pos[o + 2] = Math.sin(a) * r;
+    pos[o] = Math.cos(a) * r; pos[o + 1] = -0.15 + rand(-0.05, 0.05); pos[o + 2] = Math.sin(a) * r;
     var fade = 1 - Math.min(r / 12.5, 1);
     c.setHSL(rand(0.07, 0.14), 0.8, 0.20 + fade * 0.18);
     size[k] = rand(0.4, 1.2) * (0.35 + fade * 0.9);
@@ -406,9 +494,7 @@
     alpha[k] = rand(0.15, 0.55) * fade;
   }, matFloor));
 
-  /* =======================================================================
-     地面光晕 + 顶星
-     ======================================================================= */
+  /* ---------------- 贴图 ---------------- */
   function radialTexture(stops, size) {
     size = size || 256;
     var cv = document.createElement('canvas');
@@ -416,14 +502,11 @@
     var ctx = cv.getContext('2d');
     var g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
     stops.forEach(function (s) { g.addColorStop(s[0], s[1]); });
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, size, size);
     var tex = new THREE.CanvasTexture(cv);
     if ('encoding' in tex) tex.encoding = THREE.sRGBEncoding;
-    tex.needsUpdate = true;
     return tex;
   }
-
   var glowTex = radialTexture([
     [0, 'rgba(255,214,160,0.85)'],
     [0.35, 'rgba(255,168,90,0.30)'],
@@ -438,20 +521,16 @@
   pool.position.y = -0.2;
   scene.add(pool);
 
-  // 顶星：一枚柔光 + 一枚十字星芒
   function starTexture() {
     var s = 512, cv = document.createElement('canvas');
     cv.width = cv.height = s;
-    var ctx = cv.getContext('2d');
-    var cx = s / 2;
+    var ctx = cv.getContext('2d'), cx = s / 2;
     var g = ctx.createRadialGradient(cx, cx, 0, cx, cx, s * 0.5);
     g.addColorStop(0, 'rgba(255,255,255,1)');
     g.addColorStop(0.12, 'rgba(255,244,214,0.95)');
     g.addColorStop(0.3, 'rgba(255,206,130,0.35)');
     g.addColorStop(1, 'rgba(255,180,90,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, s, s);
-    // 星芒
+    ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
     ctx.globalCompositeOperation = 'lighter';
     ctx.translate(cx, cx);
     for (var k = 0; k < 4; k++) {
@@ -461,11 +540,8 @@
       lg.addColorStop(1, 'rgba(255,220,160,0)');
       ctx.fillStyle = lg;
       ctx.beginPath();
-      ctx.moveTo(-s * 0.012, 0);
-      ctx.lineTo(0, -s * 0.48);
-      ctx.lineTo(s * 0.012, 0);
-      ctx.closePath();
-      ctx.fill();
+      ctx.moveTo(-s * 0.012, 0); ctx.lineTo(0, -s * 0.48); ctx.lineTo(s * 0.012, 0);
+      ctx.closePath(); ctx.fill();
     }
     var tex = new THREE.CanvasTexture(cv);
     if ('encoding' in tex) tex.encoding = THREE.sRGBEncoding;
@@ -473,45 +549,38 @@
   }
 
   var star = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: starTexture(), transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, opacity: 0.95
+    map: starTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.95
   }));
   star.scale.set(2.6, 2.6, 1);
   star.position.set(0, H + 0.55, 0);
   scene.add(star);
 
   var starHalo = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: glowTex, transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, opacity: 0.30
+    map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.20
   }));
   starHalo.scale.set(8.5, 8.5, 1);
   starHalo.position.copy(star.position);
   scene.add(starHalo);
 
-  /* =======================================================================
-     雪
-     ======================================================================= */
+  /* ---------------- 雪 ---------------- */
   var snowData = [];
   var matSnow = makeMaterial({ scale: 1.0, sway: 0, twinkle: 0.5, soft: 2.4, alpha: 0.95 });
   var snow = buildPoints(N_SNOW, function (i, pos, o, c, size, k, phase, alpha) {
     var x = rand(-26, 26), y = rand(0, 32), z = rand(-26, 26);
     pos[o] = x; pos[o + 1] = y; pos[o + 2] = z;
     c.setHSL(0.56, rand(0.05, 0.3), rand(0.72, 0.96));
-    size[k] = rand(0.5, 1.35);
-    phase[k] = Math.random();
-    alpha[k] = rand(0.30, 0.85);
+    size[k] = rand(0.5, 1.35); phase[k] = Math.random(); alpha[k] = rand(0.30, 0.85);
     snowData.push({ vy: rand(0.35, 1.15), drift: rand(0.25, 0.9), ph: Math.random() * TAU });
   }, matSnow);
   scene.add(snow);
   var snowPos = snow.geometry.attributes.position;
 
-  /* =======================================================================
-     星火（点击迸发）
-     ======================================================================= */
+  /* ---------------- 星火（3D 点击迸发）---------------- */
   var MAX_SPARK = 420;
   var sparkGeo = new THREE.BufferGeometry();
   var sparkPos = new Float32Array(MAX_SPARK * 3);
   var sparkCol = new Float32Array(MAX_SPARK * 3);
+  var sparkDir = new Float32Array(MAX_SPARK * 3);
   var sparkSize = new Float32Array(MAX_SPARK);
   var sparkPhase = new Float32Array(MAX_SPARK);
   var sparkAlpha = new Float32Array(MAX_SPARK);
@@ -519,6 +588,7 @@
   var sparkLife = new Float32Array(MAX_SPARK);
   sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
   sparkGeo.setAttribute('aColor', new THREE.BufferAttribute(sparkCol, 3));
+  sparkGeo.setAttribute('aDir', new THREE.BufferAttribute(sparkDir, 3));
   sparkGeo.setAttribute('aSize', new THREE.BufferAttribute(sparkSize, 1));
   sparkGeo.setAttribute('aPhase', new THREE.BufferAttribute(sparkPhase, 1));
   sparkGeo.setAttribute('aAlpha', new THREE.BufferAttribute(sparkAlpha, 1));
@@ -526,13 +596,11 @@
   var sparks = new THREE.Points(sparkGeo, matSpark);
   sparks.frustumCulled = false;
   scene.add(sparks);
-  var sparkCursor = 0;
-  var tmpColor = new THREE.Color();
+  var sparkCursor = 0, tmpColor = new THREE.Color();
 
   function burst(x, y, z, n, hue) {
     for (var i = 0; i < n; i++) {
-      var k = sparkCursor % MAX_SPARK;
-      sparkCursor++;
+      var k = sparkCursor % MAX_SPARK; sparkCursor++;
       var o = k * 3;
       sparkPos[o] = x; sparkPos[o + 1] = y; sparkPos[o + 2] = z;
       var th = Math.random() * TAU, ph = Math.acos(rand(-1, 1)), sp = rand(1.2, 6.2);
@@ -541,9 +609,8 @@
       sparkVel[o + 2] = Math.sin(ph) * Math.sin(th) * sp;
       tmpColor.setHSL(hue + rand(-0.05, 0.05), rand(0.5, 0.95), rand(0.6, 0.85));
       sparkCol[o] = tmpColor.r; sparkCol[o + 1] = tmpColor.g; sparkCol[o + 2] = tmpColor.b;
-      sparkSize[k] = rand(1.0, 2.6);
-      sparkPhase[k] = Math.random();
-      sparkAlpha[k] = 1;
+      sparkDir[o] = 0; sparkDir[o + 1] = 0; sparkDir[o + 2] = 0;
+      sparkSize[k] = rand(1.0, 2.6); sparkPhase[k] = Math.random(); sparkAlpha[k] = 1;
       sparkLife[k] = rand(0.9, 1.9);
     }
     sparkGeo.attributes.position.needsUpdate = true;
@@ -561,15 +628,13 @@
       var o = k * 3;
       sparkLife[k] -= dt;
       sparkVel[o + 1] -= 4.2 * dt;
-      sparkVel[o] *= (1 - 0.9 * dt);
-      sparkVel[o + 2] *= (1 - 0.9 * dt);
+      sparkVel[o] *= (1 - 0.9 * dt); sparkVel[o + 2] *= (1 - 0.9 * dt);
       sparkPos[o] += sparkVel[o] * dt;
       sparkPos[o + 1] += sparkVel[o + 1] * dt;
       sparkPos[o + 2] += sparkVel[o + 2] * dt;
       if (sparkPos[o + 1] < -0.1) { sparkPos[o + 1] = -0.1; sparkVel[o + 1] *= -0.25; }
       var l = Math.max(sparkLife[k], 0);
-      sparkAlpha[k] = Math.min(1, l * 1.4);
-      if (sparkLife[k] <= 0) sparkAlpha[k] = 0;
+      sparkAlpha[k] = sparkLife[k] <= 0 ? 0 : Math.min(1, l * 1.4);
     }
     if (any) {
       sparkGeo.attributes.position.needsUpdate = true;
@@ -577,19 +642,73 @@
     }
   }
 
-  /* =======================================================================
-     相机：拖动 / 惯性 / 缩放
-     ======================================================================= */
-  var theta = 0.35, phi = 0.13, dist = 33, targetDist = 33;
+  /* =====================================================================
+     2D 烟花层
+     ===================================================================== */
+  var fx = $('fx');
+  var fxCtx = fx.getContext('2d');
+  var fxParts = [];
+  var fxW = 0, fxH = 0;
+
+  function resizeFx() {
+    fxW = fx.width = Math.floor(window.innerWidth * Math.min(window.devicePixelRatio || 1, 2));
+    fxH = fx.height = Math.floor(window.innerHeight * Math.min(window.devicePixelRatio || 1, 2));
+    fx.style.width = window.innerWidth + 'px';
+    fx.style.height = window.innerHeight + 'px';
+  }
+
+  function firework(nx, ny, count, hue) {
+    var x = nx * fxW, y = ny * fxH;
+    var s = Math.min(fxW, fxH) / 900;
+    for (var i = 0; i < count; i++) {
+      var a = Math.random() * TAU;
+      var speed = (1.6 + Math.random() * 5.4) * s;
+      fxParts.push({
+        x: x, y: y,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed - 1.2 * s,
+        life: 1,
+        decay: 0.010 + Math.random() * 0.016,
+        hue: hue + rand(-14, 14),
+        size: (0.45 + Math.random() * 1.1) * s
+      });
+    }
+    if (fxParts.length > 2600) fxParts.splice(0, fxParts.length - 2600);
+  }
+
+  function updateFx(dt) {
+    fxCtx.globalCompositeOperation = 'destination-out';
+    fxCtx.fillStyle = 'rgba(0,0,0,' + Math.min(0.55, dt * 6) + ')';
+    fxCtx.fillRect(0, 0, fxW, fxH);
+    fxCtx.globalCompositeOperation = 'lighter';
+    for (var i = fxParts.length - 1; i >= 0; i--) {
+      var p = fxParts[i];
+      p.life -= p.decay;
+      if (p.life <= 0) { fxParts.splice(i, 1); continue; }
+      p.vy += 2.4 * dt * (fxH / 900);
+      p.vx *= (1 - 0.9 * dt);
+      p.vy *= (1 - 0.5 * dt);
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      var a = Math.max(p.life, 0);
+      fxCtx.fillStyle = 'hsla(' + p.hue + ',100%,' + (55 + a * 18) + '%,' + (a * 0.85) + ')';
+      fxCtx.beginPath();
+      fxCtx.arc(p.x, p.y, p.size * (0.4 + a), 0, TAU);
+      fxCtx.fill();
+    }
+  }
+
+  /* =====================================================================
+     相机 / 交互
+     ===================================================================== */
+  var theta = 0.35, phi = 0.13, dist = 39, targetDist = 39;
   var dTheta = 0, dPhi = 0;
   var dragging = false, lastX = 0, lastY = 0, idleAt = 0, pinchStart = 0, pinchDist = 0;
-
+  var userZoomed = false;
   var el = renderer.domElement;
 
   function onDown(e) {
-    dragging = true;
-    lastX = e.clientX; lastY = e.clientY;
-    dTheta = dPhi = 0;
+    dragging = true; lastX = e.clientX; lastY = e.clientY; dTheta = dPhi = 0;
     el.style.cursor = 'grabbing';
     idleAt = performance.now() + 2600;
   }
@@ -597,18 +716,12 @@
     if (!dragging) return;
     var dx = e.clientX - lastX, dy = e.clientY - lastY;
     lastX = e.clientX; lastY = e.clientY;
-    dTheta = -dx * 0.0055;
-    dPhi = -dy * 0.0035;
+    dTheta = -dx * 0.0055; dPhi = -dy * 0.0035;
     theta += dTheta;
     phi = Math.min(Math.max(phi + dPhi, -0.22), 0.78);
     idleAt = performance.now() + 2600;
   }
-  function onUp(e) {
-    dragging = false;
-    el.style.cursor = 'grab';
-    idleAt = performance.now() + 1600;
-    if (e && Math.abs(e.clientX - lastX) < 3 && Math.abs(e.clientY - lastY) < 3) { /* 交给 click */ }
-  }
+  function onUp() { dragging = false; el.style.cursor = 'grab'; idleAt = performance.now() + 1600; }
 
   el.style.cursor = 'grab';
   el.addEventListener('pointerdown', onDown);
@@ -623,7 +736,6 @@
     idleAt = performance.now() + 2400;
   }, { passive: false });
 
-  // 双指缩放
   el.addEventListener('touchstart', function (e) {
     if (e.touches.length === 2) {
       pinchStart = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
@@ -639,7 +751,6 @@
     }
   }, { passive: false });
 
-  // 点击撒星火
   var raycaster = new THREE.Raycaster();
   var pointerNDC = new THREE.Vector2();
   el.addEventListener('click', function (e) {
@@ -652,24 +763,194 @@
     p.x = Math.min(Math.max(p.x, -9), 9);
     p.z = Math.min(Math.max(p.z, -9), 9);
     burst(p.x, p.y, p.z, isMobile ? 60 : 110, rand(0.06, 0.16));
+    firework(e.clientX / window.innerWidth, e.clientY / window.innerHeight, 60, rand(30, 55));
+    bloomPulse = 1;
   });
 
-  function frameCamera(dt) {
-    var now = performance.now();
-    if (!dragging && now > idleAt && !reduceMotion) theta += dt * 0.055;
-    if (!dragging) { dTheta *= 0.92; dPhi *= 0.92; }
-    dist += (targetDist - dist) * Math.min(1, dt * 3.2);
-    var cy = Math.sin(phi) * dist;
-    var cr = Math.cos(phi) * dist;
-    camera.position.set(Math.sin(theta) * cr, TARGET_Y + cy, Math.cos(theta) * cr);
-    camera.lookAt(0, TARGET_Y, 0);
+  function computeFit() {
+    var a = window.innerWidth / window.innerHeight;
+    if (a < 0.62) return { fov: 52, dist: 41, ty: H * 0.62 };
+    if (a < 0.85) return { fov: 52, dist: 38, ty: H * 0.58 };
+    if (a < 1.30) return { fov: 48, dist: 38, ty: H * 0.52 };
+    return { fov: 45, dist: 39, ty: H * 0.48 };
   }
 
-  /* =======================================================================
-     照片挂饰
-     ======================================================================= */
+  /* =====================================================================
+     手势
+     ===================================================================== */
+  var hands = {
+    on: false, ready: false, loading: false,
+    landmarker: null, video: $('cam'), stream: null,
+    last: 0, gestures: [],
+    state: 'idle',
+    label: '—',
+    palm: { x: 0.5, y: 0.5 },
+    smooth: { x: 0.5, y: 0.5, pinch: 0, fist: 0 },
+    lastT: 0
+  };
+  var handCanvas = $('handCanvas');
+  var handCtx = handCanvas.getContext('2d');
+
+  var HAND_BONES = [
+    [0, 1], [1, 2], [2, 3], [3, 4],
+    [0, 5], [5, 6], [6, 7], [7, 8],
+    [5, 9], [9, 10], [10, 11], [11, 12],
+    [9, 13], [13, 14], [14, 15], [15, 16],
+    [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]
+  ];
+
+  function dist3(a, b) {
+    var dx = a.x - b.x, dy = a.y - b.y, dz = (a.z || 0) - (b.z || 0);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+
+  // 根据 21 个关键点判断手势
+  function classify(lm) {
+    var wrist = lm[0], midMcp = lm[9];
+    var size = Math.max(dist3(wrist, midMcp), 1e-4);
+    var tips = [8, 12, 16, 20], pips = [6, 10, 14, 18];
+    var ext = 0;
+    for (var i = 0; i < 4; i++) {
+      if (dist3(lm[tips[i]], wrist) > dist3(lm[pips[i]], wrist) * 1.08) ext++;
+    }
+    var pinch = dist3(lm[4], lm[8]) / size;
+    var thumbOut = dist3(lm[4], lm[17]) > dist3(lm[3], lm[17]) * 1.05;
+
+    var name = 'none';
+    if (pinch < 0.42) name = 'pinch';
+    else if (ext === 0) name = 'fist';
+    else if (ext >= 4) name = 'open';
+    else if (ext === 2 && dist3(lm[8], wrist) > dist3(lm[12], wrist) * 0.92) name = 'victory';
+    else if (ext === 1) name = 'point';
+
+    var palm = {
+      x: 1 - (lm[9].x * 0.5 + lm[0].x * 0.5),
+      y: lm[9].y * 0.6 + lm[0].y * 0.4
+    };
+    return { name: name, pinch: pinch, palm: palm, thumbOut: thumbOut };
+  }
+
+  function drawHand(lm) {
+    var w = handCanvas.width, h = handCanvas.height;
+    handCtx.save();
+    handCtx.clearRect(0, 0, w, h);
+    handCtx.translate(w, 0);
+    handCtx.scale(-1, 1);
+    handCtx.drawImage(hands.video, 0, 0, w, h);
+    handCtx.restore();
+
+    if (lm) {
+      handCtx.save();
+      handCtx.strokeStyle = 'rgba(255,214,150,.95)';
+      handCtx.lineWidth = 3;
+      handCtx.shadowColor = 'rgba(255,190,110,.9)';
+      handCtx.shadowBlur = 8;
+      handCtx.beginPath();
+      for (var b = 0; b < HAND_BONES.length; b++) {
+        var a = lm[HAND_BONES[b][0]], c = lm[HAND_BONES[b][1]];
+        handCtx.moveTo((1 - a.x) * w, a.y * h);
+        handCtx.lineTo((1 - c.x) * w, c.y * h);
+      }
+      handCtx.stroke();
+      handCtx.restore();
+    }
+  }
+
+  async function enableHands() {
+    if (hands.loading || hands.ready) return;
+    var btn = $('btnHand');
+    if (location.protocol === 'file:') {
+      toast('本地双击打开时浏览器禁止加载手势模型，<br>用部署后的网址（https）打开就能用手了。', 4200);
+      return;
+    }
+    hands.loading = true;
+    btn.disabled = true;
+    btn.classList.add('on');
+    $('handPanel').classList.add('show');
+    $('handState').textContent = '正在打开摄像头…';
+    $('handDot').classList.remove('wait');
+
+    try {
+      hands.stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        audio: false
+      });
+      hands.video.srcObject = hands.stream;
+      await hands.video.play();
+      $('handState').textContent = '正在加载手势模型…';
+      $('handDot').classList.add('wait');
+
+      var mod = await import('./vendor/mediapipe/vision_bundle.mjs');
+      var vision = await mod.FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
+      var opts = {
+        baseOptions: { modelAssetPath: './vendor/mediapipe/models/hand_landmarker.task', delegate: 'GPU' },
+        runningMode: 'VIDEO',
+        numHands: 1,
+        minHandDetectionConfidence: 0.5,
+        minHandPresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      };
+      try {
+        hands.landmarker = await mod.HandLandmarker.createFromOptions(vision, opts);
+      } catch (e) {
+        opts.baseOptions.delegate = 'CPU';
+        hands.landmarker = await mod.HandLandmarker.createFromOptions(vision, opts);
+      }
+
+      hands.ready = true;
+      hands.on = true;
+      btn.classList.remove('on');
+      btn.classList.add('on');
+      $('handDot').classList.remove('wait');
+      $('handState').textContent = '识别中';
+      $('hint').textContent = '挥手转树 · 捏合缩放 · 握拳炸开 · 比 ✌ 切歌';
+      toast('张开手掌转动这棵树 · 捏合缩放 · 握拳炸开', 3600);
+    } catch (err) {
+      console.warn('[hand]', err);
+      $('handPanel').classList.remove('show');
+      btn.disabled = false;
+      btn.classList.remove('on');
+      toast('手势没启动成功：' + (err && err.message ? err.message : '未知错误') + '<br>鼠标 / 触摸照常可用', 4200);
+    } finally {
+      hands.loading = false;
+      btn.disabled = false;
+    }
+  }
+
+  function detectHands(now) {
+    if (!hands.ready || hands.video.readyState < 2) return;
+    if (now - hands.last < 38) return;
+    hands.last = now;
+    var res;
+    try {
+      res = hands.landmarker.detectForVideo(hands.video, now);
+    } catch (e) { return; }
+
+    var lm = res && res.landmarks && res.landmarks[0];
+    drawHand(lm || null);
+
+    if (lm) {
+      var info = classify(lm);
+      hands.label = info.name;
+      hands.palm.x = info.palm.x;
+      hands.palm.y = info.palm.y;
+      hands.pinchNow = info.pinch;
+      hands.hasHand = true;
+      var names = { open: '张掌', pinch: '捏合', fist: '握拳', victory: '✌', point: '指', none: '—' };
+      $('handGesture').textContent = names[info.name] || '—';
+      $('handState').textContent = '识别中';
+    } else {
+      hands.hasHand = false;
+      hands.label = 'none';
+      $('handGesture').textContent = '—';
+      $('handState').textContent = '把手放进来';
+    }
+  }
+
+  /* =====================================================================
+     照片
+     ===================================================================== */
   var photos = [];
-  var photoTextures = [];
   var filePicker = $('filePicker');
 
   function polaroid(img) {
@@ -677,25 +958,20 @@
     var cv = document.createElement('canvas');
     cv.width = W; cv.height = Hc;
     var ctx = cv.getContext('2d');
-    // 白边
     ctx.fillStyle = '#fbf8f3';
     ctx.beginPath();
     var r = 14;
     ctx.moveTo(r, 0); ctx.arcTo(W, 0, W, Hc, r); ctx.arcTo(W, Hc, 0, Hc, r);
     ctx.arcTo(0, Hc, 0, 0, r); ctx.arcTo(0, 0, W, 0, r); ctx.closePath();
     ctx.fill();
-    // 图片区域
     var pad = 22, top = 22, bottom = 78;
     var iw = W - pad * 2, ih = Hc - top - bottom;
     var s = Math.max(iw / img.width, ih / img.height);
     var dw = img.width * s, dh = img.height * s;
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(pad, top, iw, ih);
-    ctx.clip();
+    ctx.beginPath(); ctx.rect(pad, top, iw, ih); ctx.clip();
     ctx.drawImage(img, pad + (iw - dw) / 2, top + (ih - dh) / 2, dw, dh);
     ctx.restore();
-    // 底部小字
     ctx.fillStyle = 'rgba(60,70,86,.55)';
     ctx.font = '300 22px system-ui,sans-serif';
     ctx.textAlign = 'center';
@@ -703,7 +979,6 @@
     var tex = new THREE.CanvasTexture(cv);
     if ('encoding' in tex) tex.encoding = THREE.sRGBEncoding;
     tex.anisotropy = 4;
-    tex.needsUpdate = true;
     return tex;
   }
 
@@ -720,14 +995,12 @@
     sp.material.rotation = rand(-0.14, 0.14);
     treeGroup.add(sp);
     photos.push(sp);
-    photoTextures.push(tex);
   }
 
   filePicker.addEventListener('change', function () {
     var files = Array.prototype.slice.call(filePicker.files || []);
     if (!files.length) return;
-    var room = 14 - photos.length;
-    files = files.slice(0, Math.max(room, 0));
+    files = files.slice(0, Math.max(14 - photos.length, 0));
     if (!files.length) { toast('树上最多挂 14 张，先刷新再来'); return; }
     var done = 0;
     files.forEach(function (f) {
@@ -746,28 +1019,23 @@
 
   $('btnPhotos').addEventListener('click', function () { filePicker.click(); });
 
-  /* =======================================================================
-     音乐：WebAudio 合成《Jingle Bells》
-     ======================================================================= */
+  /* =====================================================================
+     音乐
+     ===================================================================== */
   var actx = null, master = null, musicOn = false, musicTimer = null, nextLoopAt = 0;
-
   var BEAT = 0.34;
-  var E4 = 329.63, F4 = 349.23, G4 = 392.00, C4 = 261.63, D4 = 293.66, A4 = 440.00;
+  var E4 = 329.63, F4 = 349.23, G4 = 392.00, C4 = 261.63, D4 = 293.66;
   var MELODY = [
-    [E4, 1], [E4, 1], [E4, 2],
-    [E4, 1], [E4, 1], [E4, 2],
+    [E4, 1], [E4, 1], [E4, 2], [E4, 1], [E4, 1], [E4, 2],
     [E4, 1], [G4, 1], [C4, 1.5], [D4, 0.5], [E4, 4],
     [F4, 1], [F4, 1], [F4, 1.5], [F4, 0.5],
     [F4, 1], [E4, 1], [E4, 1], [E4, 0.5], [E4, 0.5],
-    [E4, 1], [D4, 1], [D4, 1], [E4, 1],
-    [D4, 2], [G4, 2],
-    [E4, 1], [E4, 1], [E4, 2],
-    [E4, 1], [E4, 1], [E4, 2],
+    [E4, 1], [D4, 1], [D4, 1], [E4, 1], [D4, 2], [G4, 2],
+    [E4, 1], [E4, 1], [E4, 2], [E4, 1], [E4, 1], [E4, 2],
     [E4, 1], [G4, 1], [C4, 1.5], [D4, 0.5], [E4, 4],
     [F4, 1], [F4, 1], [F4, 1.5], [F4, 0.5],
     [F4, 1], [E4, 1], [E4, 1], [E4, 0.5], [E4, 0.5],
-    [G4, 1], [G4, 1], [F4, 1], [D4, 1],
-    [C4, 4]
+    [G4, 1], [G4, 1], [F4, 1], [D4, 1], [C4, 4]
   ];
 
   function ensureAudio() {
@@ -776,20 +1044,15 @@
     if (!AC) return null;
     actx = new AC();
     master = actx.createGain();
-    master.gain.value = 0.0;
-    // 一点点空间感
+    master.gain.value = 0;
     var delay = actx.createDelay();
     delay.delayTime.value = 0.19;
-    var fb = actx.createGain();
-    fb.gain.value = 0.26;
-    var wet = actx.createGain();
-    wet.gain.value = 0.3;
+    var fb = actx.createGain(); fb.gain.value = 0.26;
+    var wet = actx.createGain(); wet.gain.value = 0.3;
     master.connect(actx.destination);
     master.connect(delay);
-    delay.connect(fb);
-    fb.connect(delay);
-    delay.connect(wet);
-    wet.connect(actx.destination);
+    delay.connect(fb); fb.connect(delay);
+    delay.connect(wet); wet.connect(actx.destination);
     return actx;
   }
 
@@ -799,39 +1062,25 @@
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(0.20, t + 0.012);
     g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, 0.32) * 1.5);
-
-    var partials = [[1, 1], [2.01, 0.34], [3.02, 0.12], [4.98, 0.05]];
-    partials.forEach(function (p) {
-      var o = actx.createOscillator();
-      var og = actx.createGain();
-      o.type = 'sine';
-      o.frequency.value = freq * p[0];
-      og.gain.value = p[1];
+    [[1, 1], [2.01, 0.34], [3.02, 0.12], [4.98, 0.05]].forEach(function (p) {
+      var o = actx.createOscillator(), og = actx.createGain();
+      o.type = 'sine'; o.frequency.value = freq * p[0]; og.gain.value = p[1];
       o.connect(og); og.connect(g);
-      o.start(t);
-      o.stop(t + Math.max(dur, 0.32) * 1.6 + 0.05);
+      o.start(t); o.stop(t + Math.max(dur, 0.32) * 1.6 + 0.05);
     });
   }
 
   function scheduleLoop(startAt) {
     var t = startAt;
-    for (var i = 0; i < MELODY.length; i++) {
-      var f = MELODY[i][0], b = MELODY[i][1];
-      bell(t, f, b * BEAT * 0.9);
-      t += b * BEAT;
-    }
+    for (var i = 0; i < MELODY.length; i++) { bell(t, MELODY[i][0], MELODY[i][1] * BEAT * 0.9); t += MELODY[i][1] * BEAT; }
     return t + 0.6;
   }
-
   function pump() {
     if (!musicOn) return;
     var now = actx.currentTime;
-    while (nextLoopAt < now + 1.2) {
-      nextLoopAt = scheduleLoop(nextLoopAt);
-    }
+    while (nextLoopAt < now + 1.2) nextLoopAt = scheduleLoop(nextLoopAt);
     musicTimer = setTimeout(pump, 400);
   }
-
   function musicToggle() {
     var btn = $('btnMusic');
     if (!ensureAudio()) { toast('这个浏览器不支持 Web Audio'); return; }
@@ -843,20 +1092,19 @@
       master.gain.setTargetAtTime(0.55, actx.currentTime, 0.4);
       pump();
       btn.classList.add('on');
-      $('btnMusic').querySelector('.lbl').textContent = '静音';
-      toast('🎵 Jingle Bells');
+      btn.querySelector('.lbl').textContent = '静音';
     } else {
-      master.gain.setTargetAtTime(0.0, actx.currentTime, 0.25);
+      master.gain.setTargetAtTime(0, actx.currentTime, 0.25);
       clearTimeout(musicTimer);
       btn.classList.remove('on');
-      $('btnMusic').querySelector('.lbl').textContent = '音乐';
+      btn.querySelector('.lbl').textContent = '音乐';
     }
   }
   $('btnMusic').addEventListener('click', musicToggle);
 
-  /* =======================================================================
+  /* =====================================================================
      文案 / 名字 / 分享
-     ======================================================================= */
+     ===================================================================== */
   var qs = new URLSearchParams(location.search);
   var name = (qs.get('to') || qs.get('name') || '').trim().slice(0, 20);
 
@@ -866,7 +1114,7 @@
       document.title = name + ' · Merry Christmas';
     } else {
       $('sub').textContent = '愿这棵树替我陪你过冬';
-      document.title = 'Merry Christmas · 圣诞树';
+      document.title = 'Merry Christmas · 手势圣诞树';
     }
   }
   renderName();
@@ -881,18 +1129,13 @@
 
   $('btnShare').addEventListener('click', function () {
     var url = location.origin + location.pathname + (name ? '?to=' + encodeURIComponent(name) : '');
-    if (location.protocol === 'file:') {
-      toast('本地文件模式：先部署到网上才有链接');
-      return;
-    }
+    if (location.protocol === 'file:') { toast('本地文件模式：先部署到网上才有链接'); return; }
     function fallback() {
       var ta = document.createElement('textarea');
-      ta.value = url;
-      ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
+      ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
       try { document.execCommand('copy'); toast('链接已复制'); }
-      catch (err) { toast('复制失败，手动复制地址栏吧'); }
+      catch (e) { toast('复制失败，手动复制地址栏吧'); }
       document.body.removeChild(ta);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -905,18 +1148,67 @@
     else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
   });
 
-  /* =======================================================================
-     主循环
-     ======================================================================= */
-  function computeFit() {
-    var a = window.innerWidth / window.innerHeight;
-    if (a < 0.62) return { fov: 52, dist: 41, ty: H * 0.62 };
-    if (a < 0.85) return { fov: 52, dist: 38, ty: H * 0.58 };
-    if (a < 1.30) return { fov: 48, dist: 38, ty: H * 0.52 };
-    return { fov: 45, dist: 39, ty: H * 0.48 };
-  }
-  var userZoomed = false;
+  $('btnHand').addEventListener('click', enableHands);
 
+  /* =====================================================================
+     手势 → 场景
+     ===================================================================== */
+  var handState = { gesture: 'none', active: false, holdT: 0, lastGesture: 'none' };
+  var explode = 0, explodeTarget = 0;
+  var bloomPulse = 0;
+  var gestureRot = 0;
+
+  function applyHand(dt) {
+    var g = handState.gesture;
+    var s = hands.smooth;
+
+    // 平滑手掌位置
+    s.x += (hands.palm.x - s.x) * Math.min(1, dt * 8);
+    s.y += (hands.palm.y - s.y) * Math.min(1, dt * 8);
+
+    var active = hands.ready && hands.hasHand && g !== 'none';
+
+    if (active && (g === 'open' || g === 'point' || g === 'victory')) {
+      // 手掌左右 → 树转动；上下 → 抬降机位
+      theta += ((s.x - 0.5) * 2.6 - theta + gestureRot) * Math.min(1, dt * 3);
+      phi += (0.13 + (0.5 - s.y) * 0.55 - phi) * Math.min(1, dt * 3);
+      guestureActive = true;
+    }
+
+    if (active && g === 'pinch') {
+      // 捏合程度 → 远近
+      var k = Math.min(1, Math.max(0, (hands.pinchNow - 0.15) / 0.9));
+      targetDist += ((16 + k * 34) - targetDist) * Math.min(1, dt * 4);
+      userZoomed = true;
+    }
+
+    // 握拳 → 炸开
+    explodeTarget = (active && g === 'fist') ? 1 : 0;
+    explode += (explodeTarget - explode) * Math.min(1, dt * 3.4);
+
+    // 手势切换钩子
+    if (g !== handState.lastGesture) {
+      if (handState.lastGesture === 'fist' && g !== 'fist') {
+        // 松拳 → 烟花
+        for (var i = 0; i < 3; i++) {
+          firework(rand(0.2, 0.8), rand(0.15, 0.45), isMobile ? 40 : 70, rand(28, 52));
+        }
+        bloomPulse = 1;
+      }
+      if (g === 'victory' && handState.lastGesture !== 'victory') musicToggle();
+      if (g === 'fist') {
+        firework(rand(0.3, 0.7), rand(0.2, 0.5), isMobile ? 30 : 55, rand(35, 50));
+        bloomPulse = 1;
+      }
+      handState.lastGesture = g;
+    }
+    handState.gesture = g;
+  }
+  var guestureActive = false;
+
+  /* =====================================================================
+     主循环
+     ===================================================================== */
   function onResize() {
     var w = window.innerWidth, h = window.innerHeight;
     camera.aspect = w / h;
@@ -928,6 +1220,8 @@
     renderer.setSize(w, h);
     DPR = Math.min(window.devicePixelRatio || 1, 2);
     renderer.setPixelRatio(DPR);
+    resizeTargets(Math.floor(w * DPR), Math.floor(h * DPR));
+    resizeFx();
     [matTree, matGarland, matOrn, matFloor, matSnow, matSpark].forEach(function (m) {
       m.uniforms.uPR.value = DPR;
     });
@@ -936,13 +1230,25 @@
   onResize();
 
   var clock = new THREE.Clock();
-  var tAcc = 0;
-  var running = true;
+  var tAcc = 0, running = true;
 
   document.addEventListener('visibilitychange', function () {
     running = !document.hidden;
     if (running) clock.getDelta();
   });
+
+  function frameCamera(dt) {
+    var now = performance.now();
+    var handDriving = hands.ready && hands.hasHand && ['open', 'point', 'victory'].indexOf(hands.label) >= 0;
+    if (!handDriving) {
+      if (!dragging && now > idleAt && !reduceMotion) theta += dt * 0.055;
+    }
+    dist += (targetDist - dist) * Math.min(1, dt * 3.2);
+    var cy = Math.sin(phi) * dist;
+    var cr = Math.cos(phi) * dist;
+    camera.position.set(Math.sin(theta) * cr, TARGET_Y + cy, Math.cos(theta) * cr);
+    camera.lookAt(0, TARGET_Y, 0);
+  }
 
   function animate() {
     requestAnimationFrame(animate);
@@ -950,49 +1256,85 @@
     var dt = Math.min(clock.getDelta(), 0.05);
     tAcc += dt;
 
-    // 树在呼吸
-    matTree.uniforms.uTime.value = tAcc;
-    matGarland.uniforms.uTime.value = tAcc;
-    matOrn.uniforms.uTime.value = tAcc;
-    matFloor.uniforms.uTime.value = tAcc;
-    matSnow.uniforms.uTime.value = tAcc;
-    matSpark.uniforms.uTime.value = tAcc;
+    if (hands.ready) detectHands(performance.now());
+    applyHand(dt);
 
-    // 雪落
+    [matTree, matGarland, matOrn, matFloor, matSnow, matSpark].forEach(function (m) {
+      m.uniforms.uTime.value = tAcc;
+      m.uniforms.uExplode.value = explode;
+    });
+    // 树本身受握拳影响最明显
+    matTree.uniforms.uExplode.value = explode;
+    matGarland.uniforms.uExplode.value = explode;
+    matOrn.uniforms.uExplode.value = explode;
+
     for (var i = 0; i < N_SNOW; i++) {
-      var o = i * 3;
-      var d = snowData[i];
+      var o = i * 3, d = snowData[i];
       var y = snowPos.array[o + 1] - d.vy * dt;
-      if (y < -0.5) {
-        y = 32;
-        snowPos.array[o] = rand(-26, 26);
-        snowPos.array[o + 2] = rand(-26, 26);
-      }
+      if (y < -0.5) { y = 32; snowPos.array[o] = rand(-26, 26); snowPos.array[o + 2] = rand(-26, 26); }
       snowPos.array[o + 1] = y;
       snowPos.array[o] += Math.sin(tAcc * d.drift + d.ph) * dt * 0.35;
     }
     snowPos.needsUpdate = true;
 
-    // 星与光晕呼吸
     var pulse = 1 + Math.sin(tAcc * 1.7) * 0.06;
     star.scale.set(2.6 * pulse, 2.6 * pulse, 1);
     starHalo.scale.set(8.5 * pulse, 8.5 * pulse, 1);
     starHalo.material.opacity = 0.26 + Math.sin(tAcc * 1.7) * 0.06;
+    star.material.opacity = 0.95 - explode * 0.5;
+    starHalo.material.opacity *= (1 - explode * 0.6);
     treeGroup.rotation.y = Math.sin(tAcc * 0.12) * 0.04;
 
     updateSparks(dt);
+    updateFx(dt);
     frameCamera(dt);
 
-    // 照片淡入
     for (var j = 0; j < photos.length; j++) {
       var m = photos[j].material;
       if (m.opacity < 1) m.opacity = Math.min(1, m.opacity + dt * 1.6);
     }
 
+    // ---- 渲染：场景 → 泛光 → 合成 ----
+    bloomPulse = Math.max(0, bloomPulse - dt * 1.8);
+
+    renderer.setRenderTarget(rtScene);
+    renderer.clear();
     renderer.render(scene, camera);
+
+    fsQuad.material = matBright;
+    matBright.uniforms.tDiffuse.value = rtScene.texture;
+    renderer.setRenderTarget(rtBright);
+    renderer.render(fsScene, fsCam);
+
+    fsQuad.material = matBlur;
+    matBlur.uniforms.tDiffuse.value = rtBright.texture;
+    matBlur.uniforms.uDir.value.set(1 / rtBlurA.width, 0);
+    renderer.setRenderTarget(rtBlurA);
+    renderer.render(fsScene, fsCam);
+
+    matBlur.uniforms.tDiffuse.value = rtBlurA.texture;
+    matBlur.uniforms.uDir.value.set(0, 1 / rtBlurA.height);
+    renderer.setRenderTarget(rtBlurB);
+    renderer.render(fsScene, fsCam);
+
+    matBlur.uniforms.tDiffuse.value = rtBlurB.texture;
+    matBlur.uniforms.uDir.value.set(1.6 / rtBlurA.width, 0);
+    renderer.setRenderTarget(rtBlurA);
+    renderer.render(fsScene, fsCam);
+
+    matBlur.uniforms.tDiffuse.value = rtBlurA.texture;
+    matBlur.uniforms.uDir.value.set(0, 1.6 / rtBlurA.height);
+    renderer.setRenderTarget(rtBlurB);
+    renderer.render(fsScene, fsCam);
+
+    fsQuad.material = matComp;
+    matComp.uniforms.tScene.value = rtScene.texture;
+    matComp.uniforms.tBloom.value = rtBlurB.texture;
+    matComp.uniforms.uStrength.value = 0.62 + bloomPulse * 0.75 + explode * 0.30;
+    renderer.setRenderTarget(null);
+    renderer.render(fsScene, fsCam);
   }
 
-  // 第一帧确认没问题再显示，避免白闪
   try {
     renderer.render(scene, camera);
     document.body.classList.add('ready');
@@ -1002,12 +1344,27 @@
   }
   animate();
 
-  // 开场就来一小把星火
   setTimeout(function () {
     burst(0, H * 0.62, 0, isMobile ? 40 : 70, 0.12);
   }, 900);
 
-  window.__tree = { THREE: THREE, scene: scene, camera: camera };
+  /* ---------------- 调试钩子（自动化测试用）---------------- */
+  window.__tree = {
+    simHand: function (gesture, x, y) {
+      hands.ready = true;
+      hands.hasHand = gesture !== 'none';
+      hands.label = gesture;
+      handState.gesture = gesture;
+      hands.palm.x = x == null ? 0.5 : x;
+      hands.palm.y = y == null ? 0.5 : y;
+      hands.pinchNow = gesture === 'pinch' ? 0.2 : 1;
+      handState.lastGesture = gesture;
+      return gesture;
+    },
+    explode: function (v) { explode = v; explodeTarget = v; },
+    fx: function (x, y, n, hue) { firework(x, y, n || 120, hue == null ? 42 : hue); bloomPulse = 1; },
+    state: function () { return { explode: explode, gesture: handState.gesture, theta: theta, dist: dist }; }
+  };
 })();
 </script>
 </body>

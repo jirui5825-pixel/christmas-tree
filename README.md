@@ -1,55 +1,72 @@
-# 🎄 christmas-tree · v7.6
+# 🎄 christmas-tree · v7.6 gesture
 
-一棵会呼吸的 3D 粒子圣诞树。单页 HTML，纯 WebGL（three.js），没有后端、没有构建步骤、没有外部 CDN 依赖 —— 传上去就能看。
+一棵**用手控制的** 3D 粒子圣诞树：挥手转树、捏合缩放、握拳把它炸成星云，松手重新聚回来。
+
+纯前端、单页 HTML —— Three.js 粒子 + 泛光后期 + MediaPipe 手部关键点，没有后端、没有构建步骤。
 
 ![预览](preview.jpg)
 
-## 能做什么
+## 手部交互
 
-- **20 000 颗粒子**组成的锥形树：外壳绿、螺旋金色彩带、金/红/冰蓝挂饰
-- **顶星**会呼吸，地面有暖光；**飘雪**一直在下
-- **拖动旋转**、**滚轮 / 双指缩放**，松手后缓慢自转
-- **点击**任意位置，在树上撒一把星火
-- **挂照片**：最多 14 张，自动做成拍立得，挂在树上
+点右下角 **✋ 手势** → 允许摄像头 → 把手放进左下角小窗里。
+
+| 手势 | 效果 |
+| --- | --- |
+| 🖐 **张开手掌** | 左右移动 → 树跟着转；上下移动 → 抬升/压低机位 |
+| 🤏 **拇指食指捏合** | 拉近 / 推远（捏得越紧越近） |
+| ✊ **握拳** | 整棵树炸开成金色星云，同时放烟花 |
+| ✌ **比 V** | 播放 / 暂停背景音乐 |
+
+不想开摄像头？鼠标和触摸完全一样能用：拖动旋转、滚轮/双指缩放、点击撒星火。
+
+> 摄像头画面**只在本机处理**，不上传、不录制、不保存。关掉页面就没了。
+
+## 其它玩法
+
+- **顶星**会呼吸，**雪**一直在下，**点击**任意位置撒一把星火 + 一小朵烟花
+- **挂照片**：最多 14 张，自动做成拍立得挂在树上（同样只在本机）
 - **音乐**：WebAudio 现场合成《Jingle Bells》，不加载任何音频文件
 - **写上名字**：`?to=小美` 打开就是「亲爱的 小美，愿这棵树替我陪你过冬」
-- 手机 / 平板 / 桌面自适应，竖屏自动拉远镜头
+- 桌面 / 平板 / 手机三档自动取景
 
 ## 本地打开
 
-直接双击 `index.html` 就行（`vendor/` 要和它放在一起）。
-
-> 需要浏览器支持 WebGL2。Chrome / Edge / Safari 新版本都可以；
-> 如果一片黑，去 `chrome://settings/system` 打开「使用图形加速功能」。
-
-## 放到 GitHub Pages
-
-仓库已经按 Pages 的根目录结构排好：
-
-```
-index.html          # 页面本体
-vendor/three.min.js # three.js（本地，不依赖 CDN）
-.nojekyll           # 关掉 Jekyll，原样输出
+```bash
+npx serve .          # 或者任意静态服务器
 ```
 
-推上去后：**Settings → Pages → Source: Deploy from a branch → main / (root) → Save**，
-等一两分钟就能打开 `https://<你的用户名>.github.io/christmas-tree/`。
+浏览器直接双击 `index.html` 也能看（三维和鼠标交互都正常），
+但**手势模式需要 http(s)**：`file://` 下浏览器禁止动态加载模型。
 
-## 想改点什么
+线上版本：**https://jirui5825-pixel.github.io/christmas-tree/**
 
-| 想改 | 去哪 |
-| --- | --- |
-| 树高 / 粗细 | `var H = 15;` / `var R = 6.2;` |
-| 粒子数量（性能） | `N_SHELL` / `N_GARLAND` / `N_SNOW` |
-| 顶部大字 | `<h1 class="title">Merry Christmas</h1>` |
-| 副标题 | `<p class="sub" id="sub">…</p>`（写了名字会被 JS 覆盖） |
-| 配色 | 搜 `setHSL`，改色相 / 饱和度 / 亮度 |
+## 目录
+
+```
+index.html                          # 页面本体（三维 + 手势 + 后期）
+vendor/three.min.js                 # Three.js r151
+vendor/mediapipe/vision_bundle.mjs  # MediaPipe Tasks Vision 0.10.3
+vendor/mediapipe/wasm/*.wasm        # 手部识别的 wasm 运行时（8.3 MB）
+vendor/mediapipe/models/hand_landmarker.task   # 手部 21 点模型（7.5 MB）
+```
+
+> 模型和 wasm 一共约 17 MB，**只有点「手势」时才会加载**，不影响首屏。
+
+## 参考的开源项目
+
+手势识别这套玩法来自社区里几个很棒的实现，本项目在它们的基础上重写了渲染与交互：
+
+- [echoezy9527/christmas-tree-generated-by-gemini-3](https://github.com/echoezy9527/christmas-tree-generated-by-gemini-3)（Apache-2.0）— 「Gemini3 生成的手势控制 3D 粒子圣诞树」原作者版本，手势 + 烟花章节的思路来源
+- [kK-2004/Ai-Gesture-Christmas-Tree](https://github.com/kK-2004/Ai-Gesture-Christmas-Tree)（MIT）— MediaPipe + Three.js 的手势照片树，配置化思路参考
+- [Timo8848/gesture-Christmas_tree-3d_with_photo](https://github.com/Timo8848/gesture-Christmas_tree-3d_with_photo)（MIT）— 手势 + 照片点的工程结构参考
+- [blackboxo/christmas-tree](https://github.com/blackboxo/christmas-tree) — 手势控制与视觉调性参考
 
 ## 技术栈
 
-three.js r151（UMD，本地）· 自定义 ShaderMaterial 点精灵 · AdditiveBlending ·
-WebAudio 合成 · Canvas 生成贴图。零依赖、零构建。
+Three.js r151（UMD，本地）· 自定义 ShaderMaterial 点精灵 · 手写泛光后期（亮度提取 → 两次分离高斯 → 合成）·
+2D Canvas 烟花层 · MediaPipe Tasks Vision（HandLandmarker，GPU/CPU 自动降级）· WebAudio 合成。
 
 ## 许可
 
-MIT。three.js 版权归 three.js authors（MIT）。
+本项目代码 MIT。第三方：
+Three.js MIT（`vendor/LICENSE-three.txt`），MediaPipe Apache-2.0（`vendor/mediapipe/LICENSE`）。
