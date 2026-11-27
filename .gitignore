@@ -1,0 +1,6 @@
+# 本地工具 / 预览产物，不进仓库
+.tools/
+tools/
+preview/
+*.log
+*.err
